@@ -1,0 +1,135 @@
+# Fichier créé à partir du template Gitlab
+
+# changer image docker
+default:
+  image: gondotcl/devils_balls_guest:latest
+
+stages:          # List of stages for jobs, and their order of execution
+  - build
+  - test
+  - deploy
+
+build-job:       # This job runs in the build stage, which runs first.
+  stage: build
+  artifacts:
+    untracked: true
+  script:
+    - echo "Compiling the code..."
+    # add other necessary commands for the docker
+    - apt update
+    - rosdep update --rosdistro humble
+    # apt install python3-catkin-pkg
+    # build the packages
+    - cd ros2_ws/
+    - rm -rf build/ install/ log/
+    - source /opt/ros/humble/setup.bash
+    - colcon build --packages-skip tennis_court
+    - echo "Compile complete."
+  rules:
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_BRANCH == "main"   # normalement ça ne se fait pas de re-build sur main, mais pas de moyen trouvé pour conserver les fichiers de build après la fin de la pipeline de develop
+
+unit-test-job:   # This job runs in the test stage.
+  stage: test    # It only starts when the job in the build stage completes successfully.
+  script:
+    - echo "Running unit tests... This will take about 60 seconds."
+    - echo "Code coverage is 90%"
+  rules:
+    - if: $CI_COMMIT_BRANCH == "none"
+
+lint-test-job:   # This job also runs in the test stage.
+  stage: test    # It can run at the same time as unit-test-job (in parallel).
+  script:
+    - echo "Linting code... This will take about 10 seconds."
+    - echo "No lint issues found."
+  rules:
+    - if: $CI_COMMIT_BRANCH == "none"
+
+deploy-job:      # This job runs in the deploy stage.
+  stage: deploy  # It only runs when *both* jobs in the test stage complete successfully.
+  environment: development
+  dependencies:
+    - build-job
+  script:
+    - echo "Installing applications..."
+    - apt update
+    - apt install python3-catkin-pkg python3-bloom fakeroot dpkg-dev debhelper -y
+    # catkin_prepare_release -y # pour le changement automatique de version
+    - echo "Deploying application..."
+    - echo "yaml file:/builds/devils_balls_guest/benoit-pai-rob/bloom_config.yml" >> /etc/ros/rosdep/sources.list.d/10-local.list # vérifier le path
+    - rosdep update
+    - source /opt/ros/humble/setup.bash
+    - cd ros2_ws/
+    - source install/setup.bash
+    # package custom_msg
+    - echo "Générer debian custom_msg"
+    - cd src/custom_msg/
+    - rosdep update
+    - bloom-generate rosdebian --ros-distro humble --os-name ubuntu --os-version jammy -d
+    - fakeroot debian/rules binary
+    - cd ..
+    - 'curl -u "$ID_CURL:$PSSWRD" -H "Content-Type:multipart/form-data" --data-binary "@$(find . -name "*.deb" | grep custom)" "http://172.19.48.50:8081/repository/supernana_dev/"'
+    # package vision_pkg
+    - echo "Générer debian vision_pkg"
+    - cd vision_pkg/
+    - rosdep update
+    - bloom-generate rosdebian --ros-distro humble --os-name ubuntu --os-version jammy -d
+    - fakeroot debian/rules binary
+    - cd ..
+    - 'curl -u "$ID_CURL:$PSSWRD" -H "Content-Type:multipart/form-data" --data-binary "@$(find . -name "*.deb" | grep vision)" "http://172.19.48.50:8081/repository/supernana_dev/"'
+    - echo "Application successfully deployed."
+    # package benoit_pairob
+    - echo "Générer debian benoit_pairob"
+    - cd benoit_pairob/
+    - rosdep update
+    - bloom-generate rosdebian --ros-distro humble --os-name ubuntu --os-version jammy -d
+    - fakeroot debian/rules binary
+    - cd ..
+    - 'curl -u "$ID_CURL:$PSSWRD" -H "Content-Type:multipart/form-data" --data-binary "@$(find . -name "*.deb" | grep benoit)" "http://172.19.48.50:8081/repository/supernana_dev/"'
+  rules:
+    - if: $CI_COMMIT_BRANCH == "develop"
+
+# ajouter un deploy pour la branche main
+deploy-main-job:
+  stage: deploy
+  environment: production
+  dependencies:
+    - build-job
+  script:
+    - echo "Installing applications..."
+    - apt update
+    - apt install python3-catkin-pkg python3-bloom fakeroot dpkg-dev debhelper -y
+    # catkin_prepare_release --bump major -y # pour le changement automatique de version : on change version majeure
+    - echo "Deploying application..."
+    - echo "yaml file:/builds/devils_balls_guest/benoit-pai-rob/bloom_config.yml" >> /etc/ros/rosdep/sources.list.d/10-local.list # vérifier le path
+    - rosdep update
+    - source /opt/ros/humble/setup.bash
+    - cd ros2_ws/
+    - source install/setup.bash
+    # package custom_msg
+    - echo "Générer debian custom_msg"
+    - cd src/custom_msg/
+    - rosdep update
+    - bloom-generate rosdebian --ros-distro humble --os-name ubuntu --os-version jammy -d
+    - fakeroot debian/rules binary
+    - cd ..
+    - 'curl -u "$ID_CURL:$PSSWRD" -H "Content-Type:multipart/form-data" --data-binary "@$(find . -name "*.deb" | grep custom)" "http://172.19.48.50:8081/repository/supernana_preprod/"'
+    # package vision_pkg
+    - echo "Générer debian vision_pkg"
+    - cd vision_pkg/
+    - rosdep update
+    - bloom-generate rosdebian --ros-distro humble --os-name ubuntu --os-version jammy -d
+    - fakeroot debian/rules binary
+    - cd ..
+    - 'curl -u "$ID_CURL:$PSSWRD" -H "Content-Type:multipart/form-data" --data-binary "@$(find . -name "*.deb" | grep vision)" "http://172.19.48.50:8081/repository/supernana_preprod/"'
+    - echo "Application successfully deployed."
+    # package benoit_pairob
+    - echo "Générer debian benoit_pairob"
+    - cd benoit_pairob/
+    - rosdep update
+    - bloom-generate rosdebian --ros-distro humble --os-name ubuntu --os-version jammy -d
+    - fakeroot debian/rules binary
+    - cd ..
+    - 'curl -u "$ID_CURL:$PSSWRD" -H "Content-Type:multipart/form-data" --data-binary "@$(find . -name "*.deb" | grep benoit)" "http://172.19.48.50:8081/repository/supernana_preprod/"'
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"

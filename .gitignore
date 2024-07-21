@@ -1,0 +1,14 @@
+.vscode/
+.idea/
+
+build/
+log/
+install/
+
+*.mp4
+
+ros2_ws/src/tennis_court/
+ros2_ws/src/vision_pkg/models/weights_coco128/yolov8x.pt
+ros2_ws/build/
+ros2_ws/install/
+ros2_ws/log/

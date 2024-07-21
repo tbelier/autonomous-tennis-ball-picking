@@ -1,0 +1,12 @@
+custom_msg:
+  ubuntu: [custom_msg]
+
+vision_pkg:
+  ubuntu: [vision_pkg]
+
+my_robot_control:
+  ubuntu: [my_robot_control]
+
+benoit_pairob:
+  ubuntu: [benoit_pairob]
+
